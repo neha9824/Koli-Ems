@@ -1,5 +1,51 @@
 {% extends 'main_app/base.html' %}
 {% load static %}
+{% block custom_css %}
+  <style>
+      .invalid {
+          font-style: italic;
+          font-weight: bold;
+          color: red;
+      }
+      .valid {
+          font-style: italic;
+          font-weight: bold;
+          color: green;
+      }
+      .camera-container {
+          position: relative;
+          width: 400px;
+          height: 300px;
+          margin: 0 auto;
+      }
+      .face-circle {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 200px;
+          height: 200px;
+          border-radius: 50%;
+          border: 3px solid #28a745;
+          z-index: 10;
+          pointer-events: none;
+      }
+      .face-preview {
+          width: 200px;
+          height: 200px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 3px solid #ddd;
+          display: none;
+          margin: 0 auto;
+      }
+      .status-message {
+          font-size: 1rem;
+          margin: 10px 0;
+          min-height: 20px;
+      }
+  </style>
+{% endblock custom_css %}
 {% block page_title %}{{page_title}}{% endblock page_title %}
 
 {% block content %}
@@ -11,9 +57,15 @@
                 <!-- general form elements -->
                 <div class="card card-primary">
                     <div class="card-header">
-                        <h3 class="card-title">{{page_title}}</h3>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <!-- <h3 class="card-title mb-0">{{ page_title }}</h3> -->
+                            <button type="button" class="btn btn-warning mb-3" data-toggle="modal" data-target="#faceRegistrationModal">
+                            <i class="fas fa-camera"></i> Register Face
+                            </button>
+                            <a href="javascript:history.back()" > ← Back</a>
+                        </div>
                     </div>
-                    {% include "main_app/form_template.html" with messages=messages  form=form button_text="Update Manager"%}
+                    {% include "main_app/add_edit_form_template.html" with messages=messages  form=form button_text="Update Manager"%}
                 </div>
                 <!-- /.card -->
 
@@ -21,4 +73,293 @@
         </div>
     </div>
 </section>
+
+
+<!-- Manual Face Registration Modal -->
+<div class="modal fade" id="faceRegistrationModal" tabindex="-1" role="dialog" aria-labelledby="faceModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="faceModalLabel">Face Registration</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <p class="instruction-text">Position your face within the circle and click Capture</p>
+                    
+                    <div class="camera-container">
+                        <video id="faceVideo" width="400" height="300" autoplay class="border rounded"></video>
+                        <div class="face-circle"></div>
+                    </div>
+                    
+                    <img id="facePreview" class="face-preview" alt="Captured face preview">
+                    
+                    <div id="faceStatus" class="status-message">
+                        Center your face in the circle before capturing
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button id="captureBtn" class="btn btn-primary">
+                            <i class="fas fa-camera"></i> Capture
+                        </button>
+                        <button id="registerBtn" class="btn btn-success" disabled>
+                            <i class="fas fa-save"></i> Register
+                        </button>
+                        <button id="retryBtn" class="btn btn-warning" style="display: none;">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock content %}
+{% block custom_js %}
+<script>
+    function validateEmail(email) {
+        const re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+        return re.test(String(email).toLowerCase());
+    }
+
+    $(document).ready(function(){
+        // Phone number and emergency contact input filter with validation
+        $("#id_phone_number, #id_emergency_phone").on("input", function() {
+            const original = this.value;
+            const digitsOnly = original.replace(/\D/g, '');
+            const warningId = this.id + "_warning";
+            const isEmergencyPhone = this.id === "id_emergency_phone";
+            const phoneNumber = $("#id_phone_number").val();
+            const emergencyPhone = $("#id_emergency_phone").val();
+
+            // Remove existing warnings
+            $("#" + warningId).remove();
+
+            // Check for non-digits
+            if (original !== digitsOnly) {
+                $("<span id='" + warningId + "' class='invalid d-block mt-1'>Only digits are allowed</span>").insertAfter(this);
+                this.value = digitsOnly;
+                return;
+            }
+
+            // Update field value
+            this.value = digitsOnly;
+
+            // Check if number starts with 1, 2, 3, or 4
+            if (/^[1-4]/.test(digitsOnly)) {
+                $("<span id='" + warningId + "' class='invalid d-block mt-1'>Phone number cannot start with 1, 2, 3, or 4</span>").insertAfter(this);
+                return;
+            }
+
+            // Additional validation for emergency phone
+            if (isEmergencyPhone) {
+                if (digitsOnly.length !== 10) {
+                    $("<span id='" + warningId + "' class='invalid d-block mt-1'>Emergency contact phone number must be exactly 10 digits</span>").insertAfter(this);
+                } else if (digitsOnly === phoneNumber) {
+                    $("<span id='" + warningId + "' class='invalid d-block mt-1'>Emergency contact phone number cannot be the same as primary phone number</span>").insertAfter(this);
+                } else {
+                    $("<span id='" + warningId + "' class='valid d-block mt-1'>Valid emergency contact phone number</span>").insertAfter(this);
+                }
+            } else {
+                // Validation for primary phone number
+                if (digitsOnly.length > 0 && digitsOnly.length !== 10) {
+                    $("<span id='" + warningId + "' class='invalid d-block mt-1'>Phone number must be exactly 10 digits</span>").insertAfter(this);
+                } else if (digitsOnly.length === 10) {
+                    $("<span id='" + warningId + "' class='valid d-block mt-1'>Valid phone number</span>").insertAfter(this);
+                }
+            }
+        });
+
+        // Prevent form submission if emergency phone is invalid
+        $("#profile-form").on("submit", function(event) {
+            const emergencyPhone = $("#id_emergency_phone").val();
+            const phoneNumber = $("#id_phone_number").val();
+            const warningId = "id_emergency_phone_warning";
+            const emergencyWarningId = "id_emergency_phone_warning";
+
+            // Remove existing warnings
+            $("#" + warningId).remove();
+            $("#" + emergencyWarningId).remove();
+
+            // Validate phone_number
+            if (!phoneNumber) {
+                event.preventDefault();
+                $("<span id='" + phoneWarningId + "' class='invalid d-block mt-1'>Phone number is required</span>").insertAfter("#id_phone_number");
+            } else if (phoneNumber.length !== 10) {
+                event.preventDefault();
+                $("<span id='" + phoneWarningId + "' class='invalid d-block mt-1'>Phone number must be exactly 10 digits</span>").insertAfter("#id_phone_number");
+            } else if (/^[1-4]/.test(phoneNumber)) {
+                event.preventDefault();
+                $("<span id='" + phoneWarningId + "' class='invalid d-block mt-1'>Phone number cannot start with 1, 2, 3, or 4</span>").insertAfter("#id_phone_number");
+            }
+
+            // Validate emergency_phone
+            if (!emergencyPhone) {
+                event.preventDefault();
+                $("<span id='" + emergencyWarningId + "' class='invalid d-block mt-1'>Emergency contact phone number is required</span>").insertAfter("#id_emergency_phone");
+            } else if (emergencyPhone.length !== 10) {
+                event.preventDefault();
+                $("<span id='" + emergencyWarningId + "' class='invalid d-block mt-1'>Emergency contact phone number must be exactly 10 digits</span>").insertAfter("#id_emergency_phone");
+            } else if (emergencyPhone === phoneNumber) {
+                event.preventDefault();
+                $("<span id='" + emergencyWarningId + "' class='invalid d-block mt-1'>Emergency contact phone number cannot be the same as primary phone number</span>").insertAfter("#id_emergency_phone");
+            } else if (/^[1-4]/.test(emergencyPhone)) {
+                event.preventDefault();
+                $("<span id='" + emergencyWarningId + "' class='invalid d-block mt-1'>Emergency contact phone number cannot start with 1, 2, 3, or 4</span>").insertAfter("#id_emergency_phone");
+            }
+        });
+
+        // Email availability checker (unchanged)
+        $("#id_email").keyup(function(){
+            var email = $(this).val();
+            if (validateEmail(email)){
+                $.ajax({
+                    url: "{% url 'check_email_availability' %}",
+                    type: 'POST',
+                    data:{email:email}
+                }).done(function(response){
+                    $(".email_error").remove();
+                    if (response == "True"){
+                        $("<span class='invalid email_error'>Email Address Already Exist</span>").insertAfter("#id_email");
+                    } else {
+                        $("<span class='valid email_error'>Email Address Available</span>").insertAfter("#id_email");
+                    }
+                }).fail(function(){
+                    $(".email_error").remove();
+                    $("<span class='alert alert-warning'>Server Could Not Process This</span>").insertAfter("#id_email");
+                });
+            }
+        });
+    });
+
+
+    // Manual Face Registration Logic
+    $(document).ready(function() {
+        const video = document.getElementById('faceVideo');
+        const facePreview = document.getElementById('facePreview');
+        const captureBtn = document.getElementById('captureBtn');
+        const registerBtn = document.getElementById('registerBtn');
+        const retryBtn = document.getElementById('retryBtn');
+        const faceStatus = document.getElementById('faceStatus');
+        let stream = null;
+        let capturedFaceBlob = null;
+        let tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 400;
+        tempCanvas.height = 300;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Start camera when modal opens
+        $('#faceRegistrationModal').on('shown.bs.modal', function() {
+            // Reset UI
+            facePreview.style.display = 'none';
+            video.style.display = 'block';
+            registerBtn.disabled = true;
+            retryBtn.style.display = 'none';
+            captureBtn.style.display = 'inline-block';
+            capturedFaceBlob = null;
+            faceStatus.innerHTML = 'Center your face in the circle before capturing';
+            
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user' 
+                } 
+            })
+            .then(function(s) {
+                stream = s;
+                video.srcObject = stream;
+            })
+            .catch(function(err) {
+                faceStatus.innerHTML = '<span class="text-danger">Camera error: ' + err.message + '</span>';
+            });
+        });
+
+        // Stop camera when modal closes
+        $('#faceRegistrationModal').on('hidden.bs.modal', function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        // Capture face manually
+        captureBtn.addEventListener('click', function() {
+            // Draw video frame to canvas
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            
+            // Create circular mask
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.beginPath();
+            tempCtx.arc(tempCanvas.width/2, tempCanvas.height/2, 100, 0, Math.PI * 2);
+            tempCtx.fill();
+            tempCtx.globalCompositeOperation = 'source-over';
+            
+            // Convert to image and display preview
+            facePreview.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+            facePreview.style.display = 'block';
+            video.style.display = 'none';
+            
+            // Convert to blob for upload
+            tempCanvas.toBlob(function(blob) {
+                capturedFaceBlob = blob;
+                registerBtn.disabled = false;
+                captureBtn.style.display = 'none';
+                retryBtn.style.display = 'inline-block';
+                faceStatus.innerHTML = '<span class="text-success">Face captured! Review and register.</span>';
+            }, 'image/jpeg', 0.9);
+        });
+
+        // Retry capturing
+        retryBtn.addEventListener('click', function() {
+            facePreview.style.display = 'none';
+            video.style.display = 'block';
+            registerBtn.disabled = true;
+            captureBtn.style.display = 'inline-block';
+            retryBtn.style.display = 'none';
+            capturedFaceBlob = null;
+            faceStatus.innerHTML = 'Center your face in the circle before capturing';
+        });
+
+        // Register face
+        registerBtn.addEventListener('click', function() {
+            if (!capturedFaceBlob) return;
+            
+            faceStatus.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Registering face data...</span>';
+            registerBtn.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('email', '{{ form.instance.admin.email }}');
+            formData.append('face_image', capturedFaceBlob, 'face.jpg');
+            
+            $.ajax({
+                url: '{% url "register_face" %}',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                success: function(data) {
+                    if (data.success) {
+                        faceStatus.innerHTML = '<span class="text-success"><i class="fas fa-check-circle"></i> Face registered successfully!</span>';
+                        setTimeout(function() {
+                            $('#faceRegistrationModal').modal('hide');
+                        }, 1500);
+                    } else {
+                        faceStatus.innerHTML = '<span class="text-danger">Error: ' + (data.error || "Registration failed") + '</span>';
+                        registerBtn.disabled = false;
+                    }
+                },
+                error: function(xhr) {
+                    faceStatus.innerHTML = '<span class="text-danger">Error: ' + (xhr.responseJSON?.error || "Server error") + '</span>';
+                    registerBtn.disabled = false;
+                }
+            });
+        });
+    });
+</script>
+{% endblock custom_js %}
